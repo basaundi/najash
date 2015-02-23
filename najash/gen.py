@@ -40,6 +40,7 @@ class Tokens:
         self.tokens = self.generate(root)
         self.name = name
         self.indentation = 0
+        self.scope = [root]
 
     def __iter__(self):
         return self
@@ -93,9 +94,9 @@ class Tokens:
         yield '}'
 
     def expr(self, expr, not_decl = None):
-        if not not_decl and hasattr(expr, 'ctx') and \
-            isinstance(expr.ctx, ast.Store):
-            yield 'var'
+        #if not not_decl and hasattr(expr, 'ctx') and \
+        #    isinstance(expr.ctx, ast.Store):
+        #    yield 'var'
         yield from self.generate(expr)
 
     def exprs(self, exprs):
@@ -135,26 +136,38 @@ class Tokens:
 
 
     def Module(self, node):
-        if self.name != '__main__':
-            yield from ('$module', '(', repr(self.name), ',')
-        else:
-            yield '('
-        yield from ('function', '(', ')')
-        #    yield from ('{', 'with', '(', 'this', ')')
-        yield from self.stmts(node.body)
-        if self.name != '__main__':
+        node.locals = []
+        if self.name: # != '__main__':
+            yield from ('$module', '(', repr(self.name), ',',
+                        'function', '(', ')')
+            yield from self.stmts(node.body)
             yield ')'
         else:
-            yield from (')', '(', '{', '}', ')')
+            yield from self.stmts(node.body)
 
     ### stmt ###
 
     def FunctionDef(self, node):
+        # (identifier name, arguments args, 
+        #                   stmt* body, expr* decorator_list, expr? returns)
         yield from ('$def', '(', 'function')
         if self.has_yield(node.body):
             yield '*'
-        yield from (node.name, '(', ')')
+        yield from (node.name, '(')
+
+        node.locals = []
+        # (arg* args, arg? vararg, arg* kwonlyargs, expr* kw_defaults,
+        #        arg? kwarg, expr* defaults)
+        tail = False
+        for arg in node.args.args:
+            yield arg.arg
+            node.locals.append(arg.arg)
+            tail = True
+
+        yield ')'
+        self.scope.append(node)
         yield from self.stmts(node.body)
+        self.scope.pop()
         yield ')'
 
     def ClassDef(self, node):
@@ -223,7 +236,7 @@ class Tokens:
             yield 'else'
             yield from self.stmts(node.orelse)
             yield from self.dedent()
-            yield '\r}'
+            yield from '\r}'
         if node.finalbody:
             yield 'finally'
             yield from self.stmts(node.finalbody)
@@ -234,7 +247,7 @@ class Tokens:
         for alias in node.names:
             name = alias.name
             asname = alias.asname if alias.asname else alias.name
-            yield from ('var', asname, '=')
+            # yield from ('var', asname, '=')
             yield from ('$import', '(', repr(name))
             if alias.asname:
                 yield repr(asname)
@@ -244,8 +257,8 @@ class Tokens:
         for alias in node.names:
             name = alias.name
             asname = alias.asname if alias.asname else alias.name
-            if name != '*':
-                yield from ('var', asname, '=')
+            #if name != '*':
+            #    yield from ('var', asname, '=')
             yield from ('$import', '(', repr(node.module),
                          ',', repr(name))
             if alias.asname:
@@ -341,8 +354,14 @@ class Tokens:
 
     # TODO: Subscript(expr value, slice slice, expr_context ctx)
     # TODO: Starred(expr value, expr_context ctx)
+
     def Name(self, node):
         # Name(identifier id, expr_context ctx)
+        if node.id in self.scope[-1].locals:
+            if isinstance(node.ctx, ast.Store):
+                yield 'var'
+        else:
+            yield from ('this', '.')
         yield node.id
 
     def List(self, node):

@@ -10,7 +10,13 @@ def from_file(fd, filename=None):
   return from_text(fd.read(), filename)
 
 def from_name(mod):
-    return from_text(find_loader(mod).get_source(mod))
+    loader = find_loader(mod)
+    if not loader:
+        raise ImportError(mod)
+    src = loader.get_source(mod)
+    if not src:
+        raise ImportError(mod)
+    return from_text(src)
 
 def dependencies(unit, path = None):
     deps = set()
@@ -40,6 +46,7 @@ def dependencies(unit, path = None):
                 except ImportError:
                     loader = None
                 if not loader:
+                    #print(prefix, node.module, name.name)
                     print('No module "', prefix, '" found')
                     continue
 

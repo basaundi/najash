@@ -1,1 +1,1 @@
-../python.js
+../../python.js/lib
