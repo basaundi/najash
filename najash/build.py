@@ -25,7 +25,7 @@ class Builder:
             if not self.needed(mod):
                 continue
             self.build_mod(mod)
-            self.out.writ('\n')
+            self.out.write('\n')
         self.out.write(self.transpile(unit, name))
 
     def build_mod(self, mod):

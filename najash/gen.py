@@ -1,6 +1,16 @@
 import ast
 import tokenize
 
+def intersperse(it, join):
+    x = next(it)
+    if x:
+        yield x
+    x = next(it)
+    while x:
+        yield join
+        yield x
+        x = next(it)
+
 class Tokens:
     OPERATORS = tuple(x.strip() for x in """
     .       (       )       [       ]       ,
@@ -14,13 +24,13 @@ class Tokens:
         ast.Mult: '*',
         ast.Div:  '/',
         ast.Mod:  '%',
-        #ast.Pow:   '+',
+        #ast.Pow:   '**',
         ast.LShift: '<<',
         ast.RShift: '>>',
         ast.BitOr: '|',
         ast.BitXor: '^',
         ast.BitAnd: '&',
-        #ast.FloorDiv: '+'
+        #ast.FloorDiv: '//'
     }
 
     CMPOP = {
@@ -31,9 +41,21 @@ class Tokens:
         ast.Gt:    '>',
         ast.GtE:   '>=',
         #ast.Is: 'is',
-        #ast.IsNot: 'isnt',
+        #ast.IsNot: 'is not',
         #ast.In: 'in',
-        #ast.NotIn: 'notin'
+        #ast.NotIn: 'not in'
+    }
+
+    BOOLOP = {
+        ast.And: '&&',
+        ast.Or: '||',
+    }
+
+    UNARYOP = {
+        ast.Invert: '~',
+        ast.Not: '!',
+        # ast.UAdd: '+', # FIXME
+        ast.USub: '-',
     }
 
     def __init__(self, root, name):
@@ -70,7 +92,7 @@ class Tokens:
         if hasattr(self, type_):
             yield from getattr(self, type_)(node)
         else:
-            yield from ('[', type_, ']')
+            yield from ('<<', type_, '>>')
 
     def indent(self):
         self.indentation += 1
@@ -155,16 +177,23 @@ class Tokens:
             yield '*'
         yield from (node.name, '(')
 
-        node.locals = []
         # (arg* args, arg? vararg, arg* kwonlyargs, expr* kw_defaults,
         #        arg? kwarg, expr* defaults)
-        tail = False
+        arguments = []
         for arg in node.args.args:
-            yield arg.arg
-            node.locals.append(arg.arg)
-            tail = True
+            arguments.append(arg.arg)
+
+        if node.args.vararg:
+            arguments.append(node.args.vararg.arg)
+
+        if arguments:
+            yield arguments[0]
+        for arg in arguments[1:]:
+            yield ','
+            yield arg
 
         yield ')'
+        node.locals = arguments[:]
         self.scope.append(node)
         yield from self.stmts(node.body)
         self.scope.pop()
@@ -188,7 +217,18 @@ class Tokens:
             yield '='
             yield from self.expr(node.value)
 
-    # TODO: AugAssign
+    def AugAssign(self, node):
+        l = self.expr(node.target)
+        r = self.expr(node.value)
+
+        op = type(node.op)
+        if op in self.OPERATOR:
+            yield from l
+            yield self.OPERATOR[op]+'='
+            yield from r
+        else:
+            yield '='
+            yield from self.operation(l, node.op, r, self.OPERATOR)
 
     def For(self, node):
         yield from ('for', '(')
@@ -211,7 +251,18 @@ class Tokens:
         yield from self.stmts(node.body)
 
     # TODO: With
-    # TODO: Raise
+
+    def Raise(self, node):
+        # (expr? exc, expr? cause)
+        yield 'throw'
+        if node.exc:
+            yield from self.expr(node.exc)
+        else:
+            yield '$e'
+        if node.cause:
+            yield from ('.', 'from', '(')
+            yield from self.expr(node.cause)
+            yield ')'
 
     def Try(self, node):
         yield 'try'
@@ -264,28 +315,45 @@ class Tokens:
             if alias.asname:
                 yield repr(asname)
             yield from ')\n'
+
     # TODO: Global
     # TODO: Nonlocal
 
     def Expr(self, node):
         yield from self.expr(node.value)
 
-    # TODO: Pass
-    # TODO: Break
-    # TODO: Continue
+    def Pass(self, node): yield '/*pass*/'
+    def Break(self, node): yield 'break'
+    def Continue(self, node): yield 'continue'
 
     ### expr ###
-    #def BoolOp(self, node):
-    #    pass
+    def BoolOp(self, node):
+        #BoolOp(boolop op, expr* values)
+        tail = False
+        for v in node.values:
+            if tail:
+                yield self.BOOLOP[type(node.op)]
+            yield from self.expr(v)
+            tail = True
 
     def BinOp(self, node):
         l = self.expr(node.left)
         r = self.expr(node.right)
         yield from self.operation(l, node.op, r, self.OPERATOR)
 
-    # TODO: UnaryOp
+    def UnaryOp(self, node):
+        yield self.UNARYOP[type(node.op)]
+        yield from self.expr(node.operand)
+
     # TODO: Lambda
-    # TODO: IfExp
+
+    def IfExp(self, node):
+        # (expr test, expr body, expr orelse)
+        yield from self.expr(node.test)
+        yield '?'
+        yield from self.expr(node.body)
+        yield ':'
+        yield from self.expr(node.orelse)
 
     def Dict(self, node):
         yield from ('dict', '(', '{')
@@ -299,13 +367,50 @@ class Tokens:
             tail = True
         yield from '})'
 
-    # TODO: Set
-    # TODO: ListComp(expr elt, comprehension* generators)
-    # TODO: SetComp(expr elt, comprehension* generators)
+    def Set(self, node):
+        yield from ('set', '(', '[')
+        yield from self.exprs(node.elts)
+        yield from '])'
+
+    def ListComp(self, node):
+        yield from ('list', '(')
+        yield from self.GeneratorExp(node)
+        yield ')'
+
+    def SetComp(self, node):
+        yield from ('set', '(')
+        yield from self.GeneratorExp(node)
+        yield ')'
+
     # TODO: DictComp(expr key, expr value, comprehension* generators)
-    # TODO: GeneratorExp(expr elt, comprehension* generators)
-    # TODO: Yield(expr? value)
-    # TODO: YieldFrom(expr value)
+
+    def GeneratorExp(self, node):
+        # (expr elt, comprehension* generators)
+        yield from ('(', 'function', '*', '{')
+        for gen in node.generators:
+            yield from ('for', '(')
+            yield from self.expr(gen.target)
+            yield 'of'
+            yield from self.expr(gen.iter)
+            yield ')'
+            for ifx in gen.ifs:
+                yield from ('if', '(')
+                yield from self.expr(ifx)
+                yield ')'
+
+        yield 'yield'
+        yield from self.expr(node.elt)
+        yield from '})()'
+
+    def Yield(self, node):
+        yield 'yield'
+        if node.value:
+            yield from self.expr(node.value)
+
+    def YieldFrom(self, node):
+        yield from ('yield', '*')
+        if node.value:
+            yield from self.expr(node.value)
 
     def Compare(self, node):
         l = []
@@ -325,6 +430,34 @@ class Tokens:
         yield from self.expr(node.func)
         yield '('
         yield from self.exprs(node.args)
+
+        if node.keywords:
+            if node.args:
+                yield ','
+            yield from ('$kw', '(', '{')
+            tail = False
+            for kw in node.keywords:
+                if tail:
+                    yield ','
+                yield kw.arg
+                yield ':'
+                yield from self.expr(kw.value)
+                tail = True
+            yield from '})'
+
+        if node.starargs:
+            if node.args:
+                yield ','
+            yield from ('$s', '(')
+            yield from self.expr(node.starargs)
+            yield ')'
+
+        if node.kwargs:
+            if node.args or node.starargs:
+                yield ','
+            yield from ('$ss', '(')
+            yield from self.expr(node.kwargs)
+            yield ')'
         yield ')'
     
     def Num(self, node):
@@ -352,7 +485,48 @@ class Tokens:
         yield '.'
         yield node.attr
 
-    # TODO: Subscript(expr value, slice slice, expr_context ctx)
+    def Subscript(self, node):
+        # (expr value, slice slice, expr_context ctx)
+        yield from self.expr(node.value)
+        yield from ('.', 'slice', '(')
+        yield from self.Slice(node.slice)
+        yield ')'
+
+    def Slice(self, node):
+        if isinstance(node, ast.Index):
+            yield from self.expr(node.value)
+            yield from (',', '1')
+        elif isinstance(node, ast.Slice):
+            if node.lower:
+                yield from self.expr(node.lower)
+            else:
+                if node.upper or node.step:
+                    yield 'undefined'
+                    yield ','
+
+            if node.upper:
+                if node.lower:
+                    yield ','
+                yield from self.expr(node.upper)
+            else:
+                if node.step:
+                    yield 'undefined'
+                    yield ','
+
+            if node.step:
+                if node.lower or node.upper:
+                    yield ','
+                yield from self.expr(node.step)
+        else:
+            tail = False
+            for slc in node.dims:
+                if tail:
+                    yield ','
+                yield from ('slice', '(')
+                yield from self.Slice(slc)
+                yield ')'
+                tail = True
+
     # TODO: Starred(expr value, expr_context ctx)
 
     def Name(self, node):
