@@ -43,14 +43,20 @@ class Builder:
             if os.path.isdir(p):
                 candidate = os.path.join(p, fname)
                 if os.path.isfile(candidate):
-                    return candidate
-        return None
+                    return candidate, mod
+        return None, None
 
-    def build_mod(self, mod, pkg = None):
-        candidate = self.get_alternative(mod, pkg)
+    def build_mod(self, mod, pkg = None, wrap = True):
+        candidate, modname = self.get_alternative(mod, pkg)
         if candidate:
             with open(candidate) as fd:
+                if wrap:
+                    self.out.write('\n$module("')
+                    self.out.write(modname)
+                    self.out.write('", function(){\n')
                 self.out.write(fd.read())
+                if wrap:
+                    self.out.write('\n})')
             return
 
         dep = ast.from_name(mod, pkg)
@@ -63,7 +69,7 @@ class Builder:
 
     def build_file(self, inp):
         self.out.write('(function(){\n')
-        self.build_mod('builtins')
+        self.build_mod('builtins', wrap = False)
 
         self.out.write('\n')
         #self.out.write('\n$module("__main__", function()')

@@ -250,7 +250,27 @@ class Tokens:
         yield ')'
         yield from self.stmts(node.body)
 
-    # TODO: With
+    def With(self, node):
+        num = 0
+        handlers = []
+        for item in node.items:
+            handler = '$w{}'.format(num)
+            handlers.append(handler)
+            yield handler
+            num += 1
+            yield '='
+            if item.optional_vars:
+                yield from self.expr(item.optional_vars)
+                yield '='
+            yield from self.expr(item.context_expr)
+            yield from ('.', '__enter__', '(', ')', ';')
+        yield from ('try', '{')
+        yield from self.stmts(node.body)
+        yield from ('}', 'finally', '{')
+        for handler in handlers:
+            yield handler
+            yield from ('.', '__exit__', '(', ')')
+        yield '}'
 
     def Raise(self, node):
         # (expr? exc, expr? cause)
@@ -292,7 +312,13 @@ class Tokens:
             yield 'finally'
             yield from self.stmts(node.finalbody)
 
-    # TODO: Assert
+    def Assert(self, node):
+        yield from ('assert', '(')
+        yield from self.expr(node.test)
+        if node.msg:
+            yield ','
+            yield from self.expr(node.msg)
+        yield ')'
 
     def Import(self, node):
         for alias in node.names:
@@ -345,7 +371,24 @@ class Tokens:
         yield self.UNARYOP[type(node.op)]
         yield from self.expr(node.operand)
 
-    # TODO: Lambda
+    def Lambda(self, node):
+        yield from ('function' ,'(')
+        arguments = []
+        for arg in node.args.args:
+            arguments.append(arg.arg)
+
+        if node.args.vararg:
+            arguments.append(node.args.vararg.arg)
+
+        if arguments:
+            yield arguments[0]
+        for arg in arguments[1:]:
+            yield ','
+            yield arg
+
+        yield from (')', '{', 'return')
+        yield from self.expr(node.body)
+        yield '}'
 
     def IfExp(self, node):
         # (expr test, expr body, expr orelse)
@@ -466,7 +509,10 @@ class Tokens:
     def Str(self, node):
         yield repr(node.s)
 
-    # TODO: Bytes(bytes s)
+    def Bytes(self, node):
+        yield from ('bytes', '(')
+        yield repr(node.s.decode('utf-8'))
+        yield ')'
 
     def NameConstant(self, node):
         if node.value is False:
