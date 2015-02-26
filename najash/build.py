@@ -40,6 +40,11 @@ class Builder:
         dep = ast.from_name(mod)
         self.build(dep, mod)
 
+    def build_filename(self, fname):
+        path.append(os.path.dirname(fname))
+        with open(fname, 'r') as fd:
+            self.build_file(fd)
+
     def build_file(self, inp):
         self.out.write('(function(){\n')
         self.build_mod('builtins')
