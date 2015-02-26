@@ -54,7 +54,7 @@ class Tokens:
     UNARYOP = {
         ast.Invert: '~',
         ast.Not: '!',
-        # ast.UAdd: '+', # FIXME
+        ast.UAdd: '+', # FIXME
         ast.USub: '-',
     }
 

@@ -1,7 +1,8 @@
 
 from ast import parse as from_text, walk
-from importlib import find_loader
-import os.path
+import sys
+from os.path import dirname
+from importlib.machinery import PathFinder
 
 def from_file(fd, filename=None):
   if not filename:
@@ -10,30 +11,45 @@ def from_file(fd, filename=None):
       filename = fd.name
   return from_text(fd.read(), filename)
 
-def from_name(mod):
-    loader = find_loader(mod)
+def from_filename(fname):
+    with open(fname) as fd:
+        ast = from_file(fd, fname)
+    return ast
+
+def name_path(mod, pkg):
+    loader = None
+    parent = None
+    path = sys.path
+    if pkg:
+        pkg_path = name_path(pkg, None)
+        if pkg_path:
+            path = [dirname(pkg_path), ] + path
+    parts = mod.split('.')
+    prefix = ''
+    for part in parts:
+        if not part:
+            prefix += '.'
+            continue
+        name = prefix + part
+        loader = PathFinder.find_module(name, path)
+        prefix = ''
+        if loader:
+            parent = dirname(loader.path)
+            if loader.is_package(name):
+                path = parent,
+            else:
+                path = tuple()
     if not loader:
+        return None
+    return loader.path
+
+def from_name(mod, pkg = None):
+    path = name_path(mod, pkg)
+    if not path:
         raise ImportError(mod)
-    src = loader.get_source(mod)
-    if not src:
-        raise ImportError(mod)
-    return from_text(src)
+    return from_filename(path)
 
-def is_package(path):
-    loader = find_loader(path)
-    if not loader:
-        return False
-    return loader.is_package(path)
-
-def is_submodule(module, package):
-    if not is_package(package):
-        return False
-    loader = find_loader(package)
-    path = os.path.dirname(loader.path)
-    fpath = os.path.join(path, module)
-    return os.path.isdir(fpath) or os.path.isfile(fpath+'.py')
-
-def dependencies(unit, path = None):
+def dependencies(unit, current):
     deps = []
     for node in walk(unit):
         nname = type(node).__name__
@@ -41,20 +57,19 @@ def dependencies(unit, path = None):
             for name in node.names:
                 if name.name not in deps: deps.append(name.name)
         elif nname == 'ImportFrom':
-            module = node.module
+            module = ''
             if node.level:
-                paths = path.split('.')
-                if is_package(path):
-                    paths.append('__init__')
-                for i in range(node.level):
-                    paths.pop()
-                if module:
-                    paths.append(module)
-                module = '.'.join(paths)
+                module = '.' * (node.level - (0 if node.module else 1))
+
+            if node.module:
+                module += node.module
 
             for name in node.names:
-                if is_submodule(name.name, module):
-                    mod = module + '.' + name.name
-                    if mod not in deps: deps.append(mod)
+                candidate = module + '.' + name.name
+                path = name_path(candidate, current)
+                if path:
+                    if candidate not in deps: deps.append(candidate)
+                else:
+                    if module not in deps: deps.append(module)
     return deps
 

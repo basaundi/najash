@@ -1,6 +1,7 @@
 
 from sys import builtin_module_names, path
 import os.path
+from importlib.machinery import PathFinder
 
 from . import ast, gen
 
@@ -8,11 +9,12 @@ class Builder:
     def __init__(self, out):
         self.out = out
         self.built = set()
-        path.append(os.path.join(os.path.dirname(__file__), 'python.js'))
+        path.insert(0, os.path.join(os.path.dirname(__file__), 'python.js'))
         self.blacklist = (
             'os.path', 'main', 'os', 'array', 'importlib',
             'pkgutil', 'collections', 'tokenize', 'argparse',
-            'inspect', 'imp', 'glob'
+            'wsgiref.simple_server', 'time',
+            'types', 'copy'
         )
 
     def transpile(self, unit, name='__main__'):
@@ -24,20 +26,34 @@ class Builder:
         for mod in ast.dependencies(unit, name):
             if not self.needed(mod):
                 continue
-            self.build_mod(mod)
+            self.build_mod(mod, name)
             self.out.write('\n')
         self.out.write(self.transpile(unit, name))
 
-    def build_mod(self, mod):
-        fname = mod.replace('.', '/') + '.js'
+    @staticmethod
+    def get_alternative(mod, pkg = None):
+        if mod.startswith('.') and pkg:
+            loader = PathFinder.find_module(pkg, path)
+            if loader:
+                modpath = ast.name_path(mod, pkg)
+                mod = pkg + mod
+
+        fname = mod.replace('.', '/') + '.js' # FIXME
         for p in path:
             if os.path.isdir(p):
                 candidate = os.path.join(p, fname)
                 if os.path.isfile(candidate):
-                    self.out.write(open(candidate).read())
-                    return
+                    return candidate
+        return None
 
-        dep = ast.from_name(mod)
+    def build_mod(self, mod, pkg = None):
+        candidate = self.get_alternative(mod, pkg)
+        if candidate:
+            with open(candidate) as fd:
+                self.out.write(fd.read())
+            return
+
+        dep = ast.from_name(mod, pkg)
         self.build(dep, mod)
 
     def build_filename(self, fname):
@@ -64,7 +80,7 @@ class Builder:
             return False
         if mod.startswith('_'):
             return False
-        if mod in self.blacklist:
-            return False
+        for blackm in self.blacklist:
+            if mod.startswith(blackm):
+                return False
         return True
-
