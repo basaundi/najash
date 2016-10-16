@@ -40,6 +40,7 @@ class Builder:
                 mod = pkg + mod
 
         fname = mod.replace('.', '/') + '.js'  # FIXME
+
         for p in path:
             if os.path.isdir(p):
                 candidate = os.path.join(p, fname)

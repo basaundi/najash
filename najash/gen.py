@@ -495,7 +495,7 @@ class Tokens:
                 yield from self.expr(kw.value)
                 tail = True
             yield from '})'
-
+        """
         if node.starargs:
             if node.args:
                 yield ','
@@ -509,6 +509,7 @@ class Tokens:
             yield from ('$ss', '(')
             yield from self.expr(node.kwargs)
             yield ')'
+        """
         yield ')'
 
     def Num(self, node):
