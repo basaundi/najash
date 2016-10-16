@@ -4,17 +4,20 @@ import sys
 from os.path import dirname
 from importlib.machinery import PathFinder
 
+
 def from_file(fd, filename=None):
-  if not filename:
-    filename = '<unknown>'
+    if not filename:
+        filename = '<unknown>'
     if hasattr(fd, 'name'):
-      filename = fd.name
-  return from_text(fd.read(), filename)
+        filename = fd.name
+    return from_text(fd.read(), filename)
+
 
 def from_filename(fname):
     with open(fname) as fd:
         ast = from_file(fd, fname)
     return ast
+
 
 def name_path(mod, pkg):
     loader = None
@@ -43,11 +46,13 @@ def name_path(mod, pkg):
         return None
     return loader.path
 
-def from_name(mod, pkg = None):
+
+def from_name(mod, pkg=None):
     path = name_path(mod, pkg)
     if not path:
         raise ImportError(mod)
     return from_filename(path)
+
 
 def dependencies(unit, current):
     deps = []
@@ -55,7 +60,8 @@ def dependencies(unit, current):
         nname = type(node).__name__
         if nname == 'Import':
             for name in node.names:
-                if name.name not in deps: deps.append(name.name)
+                if name.name not in deps:
+                    deps.append(name.name)
         elif nname == 'ImportFrom':
             module = ''
             if node.level:
@@ -68,8 +74,9 @@ def dependencies(unit, current):
                 candidate = module + '.' + name.name
                 path = name_path(candidate, current)
                 if path:
-                    if candidate not in deps: deps.append(candidate)
+                    if candidate not in deps:
+                        deps.append(candidate)
                 else:
-                    if module not in deps: deps.append(module)
+                    if module not in deps:
+                        deps.append(module)
     return deps
-

@@ -1,6 +1,7 @@
 import ast
 import tokenize
 
+
 def intersperse(it, join):
     x = next(it)
     if x:
@@ -10,6 +11,7 @@ def intersperse(it, join):
         yield join
         yield x
         x = next(it)
+
 
 class Tokens:
     OPERATORS = tuple(x.strip() for x in """
@@ -24,13 +26,13 @@ class Tokens:
         ast.Mult: '*',
         ast.Div:  '/',
         ast.Mod:  '%',
-        #ast.Pow:   '**',
+        # ast.Pow:   '**',
         ast.LShift: '<<',
         ast.RShift: '>>',
         ast.BitOr: '|',
         ast.BitXor: '^',
         ast.BitAnd: '&',
-        #ast.FloorDiv: '//'
+        # ast.FloorDiv: '//'
     }
 
     CMPOP = {
@@ -40,10 +42,10 @@ class Tokens:
         ast.LtE:   '<=',
         ast.Gt:    '>',
         ast.GtE:   '>=',
-        #ast.Is: 'is',
-        #ast.IsNot: 'is not',
-        #ast.In: 'in',
-        #ast.NotIn: 'not in'
+        # ast.Is: 'is',
+        # ast.IsNot: 'is not',
+        # ast.In: 'in',
+        # ast.NotIn: 'not in'
     }
 
     BOOLOP = {
@@ -54,7 +56,7 @@ class Tokens:
     UNARYOP = {
         ast.Invert: '~',
         ast.Not: '!',
-        ast.UAdd: '+', # FIXME
+        ast.UAdd: '+',  # FIXME
         ast.USub: '-',
     }
 
@@ -107,7 +109,7 @@ class Tokens:
         yield from '{\r'
         if stmts:
             if isinstance(stmts[0], ast.Expr) and \
-                isinstance(stmts[0].value, ast.Str): # docstring
+               isinstance(stmts[0].value, ast.Str):  # docstring
                 stmts = stmts[1:]
             for stmt in stmts:
                 yield from self.generate(stmt)
@@ -115,10 +117,10 @@ class Tokens:
         yield from self.dedent()
         yield '}'
 
-    def expr(self, expr, not_decl = None):
-        #if not not_decl and hasattr(expr, 'ctx') and \
-        #    isinstance(expr.ctx, ast.Store):
-        #    yield 'var'
+    def expr(self, expr, not_decl=None):
+        # if not not_decl and hasattr(expr, 'ctx') and \
+        #     isinstance(expr.ctx, ast.Store):
+        #     yield 'var'
         yield from self.generate(expr)
 
     def exprs(self, exprs):
@@ -145,7 +147,8 @@ class Tokens:
         for stmt in body:
             if isinstance(stmt, (ast.Yield, ast.YieldFrom)):
                 return True
-            if isinstance(stmt, (ast.With, ast.For, ast.While, ast.If, ast.Try)):
+            if isinstance(stmt,
+                          (ast.With, ast.For, ast.While, ast.If, ast.Try)):
                 if self.has_yield(stmt.body):
                     return True
             if isinstance(stmt, (ast.For, ast.While, ast.If, ast.Try)):
@@ -156,10 +159,9 @@ class Tokens:
                     return True
         return False
 
-
     def Module(self, node):
         node.locals = []
-        if self.name: # != '__main__':
+        if self.name:  # != '__main__':
             yield from ('$module', '(', repr(self.name), ',',
                         'function', '(', ')')
             yield from self.stmts(node.body)
@@ -167,10 +169,10 @@ class Tokens:
         else:
             yield from self.stmts(node.body)
 
-    ### stmt ###
+    # ## stmt ###
 
     def FunctionDef(self, node):
-        # (identifier name, arguments args, 
+        # (identifier name, arguments args,
         #                   stmt* body, expr* decorator_list, expr? returns)
         yield from ('$def', '(', 'function')
         if self.has_yield(node.body):
@@ -288,7 +290,7 @@ class Tokens:
         yield 'try'
         yield from self.stmts(node.body)
         if node.handlers:
-            yield from ('catch', '(' , '$e', ')')
+            yield from ('catch', '(', '$e', ')')
             yield from self.indent()
             yield from '{\r'
             for handler in node.handlers:
@@ -334,10 +336,10 @@ class Tokens:
         for alias in node.names:
             name = alias.name
             asname = alias.asname if alias.asname else alias.name
-            #if name != '*':
-            #    yield from ('var', asname, '=')
+            # if name != '*':
+            #     yield from ('var', asname, '=')
             yield from ('$import', '(', repr(node.module),
-                         ',', repr(name))
+                        ',', repr(name))
             if alias.asname:
                 yield repr(asname)
             yield from ')\n'
@@ -348,13 +350,19 @@ class Tokens:
     def Expr(self, node):
         yield from self.expr(node.value)
 
-    def Pass(self, node): yield '/*pass*/'
-    def Break(self, node): yield 'break'
-    def Continue(self, node): yield 'continue'
+    def Pass(self, node):
+        yield '/*pass*/'
 
-    ### expr ###
+    def Break(self, node):
+        yield 'break'
+
+    def Continue(self, node):
+        yield 'continue'
+
+    # ## expr ###
+
     def BoolOp(self, node):
-        #BoolOp(boolop op, expr* values)
+        # BoolOp(boolop op, expr* values)
         tail = False
         for v in node.values:
             if tail:
@@ -372,7 +380,7 @@ class Tokens:
         yield from self.expr(node.operand)
 
     def Lambda(self, node):
-        yield from ('function' ,'(')
+        yield from ('function', '(')
         arguments = []
         for arg in node.args.args:
             arguments.append(arg.arg)
@@ -502,7 +510,7 @@ class Tokens:
             yield from self.expr(node.kwargs)
             yield ')'
         yield ')'
-    
+
     def Num(self, node):
         yield str(node.n)
 
@@ -524,7 +532,7 @@ class Tokens:
 
     # TODO: Ellipsis
 
-    #### in assignment context ####
+    # ### in assignment context ####
     def Attribute(self, node):
         # Attribute(expr value, identifier attr, expr_context ctx)
         yield from self.expr(node.value)
@@ -600,4 +608,3 @@ class Tokens:
             yield ')'
 
 untokenize = tokenize.untokenize
-

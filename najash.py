@@ -7,13 +7,15 @@ najash
 Tools for javascript, in python.
 """
 
-__author__ = 'Ander Martinez <ander.basaundi@gmail.com>'
-
 from sys import stdout, stdin, path
 from argparse import ArgumentParser, FileType
 import os.path
 
 from najash.build import Builder
+
+
+__author__ = 'Ander Martinez <ander.basaundi@gmail.com>'
+
 
 def arguments():
     arp = ArgumentParser()
@@ -31,4 +33,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

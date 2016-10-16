@@ -5,6 +5,7 @@ from importlib.machinery import PathFinder
 
 from . import ast, gen
 
+
 class Builder:
     def __init__(self, out):
         self.out = out
@@ -31,14 +32,14 @@ class Builder:
         self.out.write(self.transpile(unit, name))
 
     @staticmethod
-    def get_alternative(mod, pkg = None):
+    def get_alternative(mod, pkg=None):
         if mod.startswith('.') and pkg:
             loader = PathFinder.find_module(pkg, path)
             if loader:
-                modpath = ast.name_path(mod, pkg)
+                # modpath = ast.name_path(mod, pkg)
                 mod = pkg + mod
 
-        fname = mod.replace('.', '/') + '.js' # FIXME
+        fname = mod.replace('.', '/') + '.js'  # FIXME
         for p in path:
             if os.path.isdir(p):
                 candidate = os.path.join(p, fname)
@@ -46,7 +47,7 @@ class Builder:
                     return candidate, mod
         return None, None
 
-    def build_mod(self, mod, pkg = None, wrap = True):
+    def build_mod(self, mod, pkg=None, wrap=True):
         candidate, modname = self.get_alternative(mod, pkg)
         if candidate:
             with open(candidate) as fd:
@@ -69,13 +70,13 @@ class Builder:
 
     def build_file(self, inp):
         self.out.write('(function(){\n')
-        self.build_mod('builtins', wrap = False)
+        self.build_mod('builtins', wrap=False)
 
         self.out.write('\n')
-        #self.out.write('\n$module("__main__", function()')
+        # self.out.write('\n$module("__main__", function()')
         root = ast.from_file(inp)
         self.build(root)
-        #self.out.write(')\n')
+        # self.out.write(')\n')
 
         self.out.write('\n$import("__main__")})()')
 
